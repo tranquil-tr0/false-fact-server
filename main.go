@@ -38,65 +38,47 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// /api endpoint
-func apiHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	switch r.Method {
-	case "GET":
-		response := Response{
-			Data:      "GET request received successfully",
-			Timestamp: time.Now(),
-			Status:    StatusSuccess,
-		}
-		json.NewEncoder(w).Encode(response)
-	case "POST":
-		response := Response{
-			Data:      "POST request received successfully",
-			Timestamp: time.Now(),
-			Status:    StatusSuccess,
-		}
-		json.NewEncoder(w).Encode(response)
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		response := Response{
-			Data:      "Method not allowed",
-			Timestamp: time.Now(),
-			Status:    StatusError,
-		}
-		json.NewEncoder(w).Encode(response)
-	}
-}
-
 // Handles root and unknown endpoints
 func rootHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
-	// non-existent endpoint
-	if r.URL.Path != "/" {
-		w.WriteHeader(http.StatusNotFound)
-		response := Response{
-			Data:      fmt.Sprintf("Endpoint '%s' does not exist", r.URL.Path),
-			Timestamp: time.Now(),
-			Status:    StatusError,
-		}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-	
-	// root endpoint
+
+	w.WriteHeader(http.StatusNotFound)
 	response := Response{
-		Data:      "Welcome to the False Fact Server API",
+		Data:      fmt.Sprintf("Endpoint '%s' does not exist", r.URL.Path),
 		Timestamp: time.Now(),
-		Status:    StatusOnline,
+		Status:    StatusError,
 	}
 	json.NewEncoder(w).Encode(response)
+	return
+}
+
+// /analyze/article endpoint handler
+func analyzeArticleHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	var req AnalyzeArticleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"status":"error","data":"Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	result, err := CallAIAnalyzeArticle(req.Content, req.Title, req.URL, req.LastEdited)
+	if err != nil {
+		http.Error(w, `{"status":"error","data":"AI analysis failed"}`, http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(result)
 }
 
 func main() {
 	http.HandleFunc("/", rootHandler)
-	http.HandleFunc("/api", apiHandler)
 	http.HandleFunc("/health", healthHandler)
+	http.HandleFunc("/analyze/article", analyzeArticleHandler)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -106,12 +88,11 @@ func main() {
 
 	fmt.Printf("🚀 Server starting on port %s\n", port)
 	fmt.Printf("📡 API endpoints:\n")
-	fmt.Printf("   - GET  / (root)\n")
 	fmt.Printf("   - GET  /api\n")
 	fmt.Printf("   - POST /api\n")
 	fmt.Printf("   - GET  /health\n")
 	fmt.Printf("\n💡 Access your server at: http://localhost%s\n", port)
-	
+
 	// Start the server
 	log.Fatal(http.ListenAndServe(port, nil))
 }
