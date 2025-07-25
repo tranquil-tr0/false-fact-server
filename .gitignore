@@ -1,0 +1,9 @@
+# binaries
+false-fact-server
+false-fact-server-win
+
+# convenience script & stuff (for me)
+push-to-prod.sh
+contents.tar
+
+.env
