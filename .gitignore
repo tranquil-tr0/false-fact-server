@@ -7,3 +7,6 @@ push-to-prod.sh
 contents.tar
 
 .env
+
+server.log
+.server.pid
