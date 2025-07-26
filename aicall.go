@@ -149,7 +149,7 @@ func geminiApiCall(prompt string) (*AnalyzeArticleResponse, error) {
 	if len(apiKey) == 0 {
 		return nil, &ExtensionError{
 			Type:        ApiUnavailable,
-			Message:     "Gemini API key is missing or invalid",
+			Message:     "Gemini API key is missing",
 			Retryable:   false,
 			UserMessage: "Please set GEMINI_API_KEY in your environment",
 		}
@@ -183,7 +183,7 @@ func geminiApiCall(prompt string) (*AnalyzeArticleResponse, error) {
 				ThinkingBudget: &thinkingBudget,
 			},
 			Tools: []*genai.Tool{
-				{GoogleSearchRetrieval: &genai.GoogleSearchRetrieval{}},
+				{GoogleSearch: &genai.GoogleSearch{}},
 			},
 		},
 	)
@@ -201,6 +201,8 @@ func geminiApiCall(prompt string) (*AnalyzeArticleResponse, error) {
 		content = result.Text()
 	}
 
+	println("GroundingChunks:", result.Candidates[0].GroundingMetadata.GroundingChunks)
+	println("GroundingSupports:", result.Candidates[0].GroundingMetadata.GroundingSupports)
 	return parseAnalysisResponse(content)
 }
 
