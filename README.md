@@ -4,8 +4,7 @@ the backend for the false fact extension
 
 ### Endpoints
 
-- `/` — root, says hi
-- `/api` — main API endpoint
+- POST `/analyze/article` — for articles `{ "content": "content", "title": "Title", "url": "something.com", "last_edited": "2025-07-25T18:05:27.849Z" }`
 - `/health` — health check
 
 ### Control Script
