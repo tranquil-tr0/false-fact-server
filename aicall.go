@@ -2,10 +2,23 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"regexp"
 	"time"
+
+	"google.golang.org/genai"
+)
+
+type Model int
+
+const (
+	Gemini Model = iota
+	Pollinations
 )
 
 // Request structure for AI API
@@ -38,9 +51,7 @@ type AnalyzeArticleResponse struct {
 }
 
 // Calls the external AI API for article analysis
-func CallAIAnalyzeArticle(content string, title string, url string, lastEdited time.Time) (*AnalyzeArticleResponse, error) {
-	aiAPIURL := "https://text.pollinations.ai/openai"
-
+func CallAIAnalyzeArticle(content string, title string, url string, lastEdited time.Time, model Model) (*AnalyzeArticleResponse, error) {
 	systemPrompt := `You are an expert fact-checker and content analyst with extensive experience in journalism, research methodology
 and information verification. Your task is to analyze text content and provide a comprehensive credibility assessment.
 You will evaluate the content based on its objectivity and factuality.
@@ -124,11 +135,81 @@ ARTICLE TEXT:
 Your response must be in the format specified above.
 `
 
+	if model == Gemini {
+		return geminiApiCall(systemPrompt + "\n\n\n" + analysisPrompt)
+	} else if model == Pollinations {
+		return pollinationsApiCall(systemPrompt, analysisPrompt)
+	} else {
+		return nil, fmt.Errorf("%v is not a recognized model", model)
+	}
+}
+
+func geminiApiCall(prompt string) (*AnalyzeArticleResponse, error) {
+	apiKey := os.Getenv("GEMINI_API_KEY")
+	if len(apiKey) == 0 {
+		return nil, &ExtensionError{
+			Type:        ApiUnavailable,
+			Message:     "Gemini API key is missing or invalid",
+			Retryable:   false,
+			UserMessage: "Please set GEMINI_API_KEY in your environment",
+		}
+	}
+
+	ctx := context.Background()
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return nil, &ExtensionError{
+			Type:        ApiUnavailable,
+			Message:     "Failed to initialize Gemini client: " + err.Error(),
+			Retryable:   true,
+			UserMessage: err.Error(),
+		}
+	}
+
+	modelName := "gemini-2.5-flash"
+	temperature := genai.Ptr[float32](0.5)
+	thinkingBudget := int32(0) // disables thinking
+
+	result, err := client.Models.GenerateContent(
+		ctx,
+		modelName,
+		genai.Text(prompt),
+		&genai.GenerateContentConfig{
+			Temperature: temperature,
+			ThinkingConfig: &genai.ThinkingConfig{
+				ThinkingBudget: &thinkingBudget,
+			},
+			Tools: []*genai.Tool{
+				{GoogleSearchRetrieval: &genai.GoogleSearchRetrieval{}},
+			},
+		},
+	)
+	if err != nil {
+		return nil, &ExtensionError{
+			Type:        ApiUnavailable,
+			Message:     "Gemini API request failed: " + err.Error(),
+			Retryable:   true,
+			UserMessage: err.Error(),
+		}
+	}
+
+	content := ""
+	if result != nil {
+		content = result.Text()
+	}
+
+	return parseAnalysisResponse(content)
+}
+
+func pollinationsApiCall(systemPrompt string, userPrompt string) (*AnalyzeArticleResponse, error) {
 	payload := map[string]interface{}{
 		"model": "openai-fast",
 		"messages": []map[string]string{
 			{"role": "system", "content": systemPrompt},
-			{"role": "user", "content": analysisPrompt},
+			{"role": "user", "content": userPrompt},
 		},
 		"temperature":     0.7,
 		"stream":          false,
@@ -136,50 +217,189 @@ Your response must be in the format specified above.
 		"response_format": map[string]string{"type": "json_object"},
 	}
 
-	body, err := json.Marshal(payload)
+	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", aiAPIURL, bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", "https://text.pollinations.ai/openai", bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("AI API returned non-200 status")
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, handleHttpStatusError(resp.StatusCode, fmt.Sprintf("POST request failed with status %d", resp.StatusCode))
 	}
 
-	var apiResp struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return nil, err
-	}
-	if len(apiResp.Choices) == 0 {
-		return nil, errors.New("No choices returned from AI API")
-	}
-
-	// The content field should be a JSON string matching AnalyzeArticleResponse
-	var result AnalyzeArticleResponse
-	if err := json.Unmarshal([]byte(apiResp.Choices[0].Message.Content), &result); err != nil {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return nil, err
 	}
 
-	return &result, nil
+	var responseJson map[string]interface{}
+	if err := json.Unmarshal(body, &responseJson); err != nil {
+		return nil, err
+	}
+
+	var content string
+	if choices, ok := responseJson["choices"].([]interface{}); ok && len(choices) > 0 {
+		if choice, ok := choices[0].(map[string]interface{}); ok {
+			if message, ok := choice["message"].(map[string]interface{}); ok {
+				if c, ok := message["content"].(string); ok {
+					content = c
+				}
+			}
+		}
+	}
+
+	return parseAnalysisResponse(content)
 }
 
-geminiApiCall ()
-pollinationsApiCall ()
+func parseAnalysisResponse(content string) (*AnalyzeArticleResponse, error) {
+	content = string(bytes.TrimSpace([]byte(content)))
+
+	// Extract first JSON object from the response
+	re := regexp.MustCompile(`\{[\s\S]*\}`)
+	jsonMatch := re.FindString(content)
+	if jsonMatch != "" {
+		content = jsonMatch
+	}
+
+	var parsed AnalyzeArticleResponse
+	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
+		return nil, &ExtensionError{
+			Type:        ApiUnavailable,
+			Message:     "Failed to parse analysis response",
+			Retryable:   true,
+			UserMessage: "Try analyzing the content again",
+		}
+	}
+
+	// Validate required fields
+	if parsed.CredibilityScore == 0 && parsed.Categories.Factuality == 0 && parsed.Categories.Objectivity == 0 &&
+		parsed.Confidence == 0 && len(parsed.Reasoning.Factual) == 0 && len(parsed.Reasoning.Unfactual) == 0 &&
+		len(parsed.Reasoning.Subjective) == 0 && len(parsed.Reasoning.Objective) == 0 {
+		return nil, &ExtensionError{
+			Type:        ApiUnavailable,
+			Message:     "Invalid response format from analysis service",
+			Retryable:   true,
+			UserMessage: "Try analyzing the content again",
+		}
+	}
+
+	// Validate score ranges
+	if parsed.CredibilityScore < 0 || parsed.CredibilityScore > 100 {
+		return nil, &ExtensionError{
+			Type:        ApiUnavailable,
+			Message:     "Invalid credibility score in response",
+			Retryable:   true,
+			UserMessage: "Try analyzing the content again",
+		}
+	}
+	if parsed.Confidence < 0 || parsed.Confidence > 100 {
+		return nil, &ExtensionError{
+			Type:        ApiUnavailable,
+			Message:     "Invalid confidence score in response",
+			Retryable:   true,
+			UserMessage: "Try analyzing the content again",
+		}
+	}
+	// Validate categories
+	if parsed.Categories.Factuality < 0 || parsed.Categories.Factuality > 100 ||
+		parsed.Categories.Objectivity < 0 || parsed.Categories.Objectivity > 100 {
+		return nil, &ExtensionError{
+			Type:        ApiUnavailable,
+			Message:     "Category values out of range",
+			Retryable:   true,
+			UserMessage: "Try analyzing the content again",
+		}
+	}
+	// Validate sources
+	if parsed.Sources == nil {
+		parsed.Sources = []string{}
+	}
+	filteredSources := []string{}
+	for _, s := range parsed.Sources {
+		if len(s) > 0 {
+			filteredSources = append(filteredSources, s)
+		}
+	}
+	parsed.Sources = filteredSources
+
+	return &parsed, nil
+}
+
+type AnalysisErrorType string
+
+const (
+	RateLimited    AnalysisErrorType = "RATE_LIMITED"
+	ApiUnavailable AnalysisErrorType = "API_UNAVAILABLE"
+	InvalidContent AnalysisErrorType = "INVALID_CONTENT"
+	NetworkError   AnalysisErrorType = "NETWORK_ERROR"
+)
+
+type ExtensionError struct {
+	Type        AnalysisErrorType
+	Message     string
+	Retryable   bool
+	UserMessage string
+}
+
+func (e *ExtensionError) Error() string {
+	return fmt.Sprintf("%s: %s", e.Type, e.Message)
+}
+
+func handleHttpStatusError(status int, message string) error {
+	switch {
+	case status == 429:
+		return &ExtensionError{
+			Type:        RateLimited,
+			Message:     "API rate limit exceeded",
+			Retryable:   true,
+			UserMessage: "Please wait a moment before trying again",
+		}
+	case status >= 500:
+		return &ExtensionError{
+			Type:        ApiUnavailable,
+			Message:     "Analysis service is temporarily unavailable",
+			Retryable:   true,
+			UserMessage: "Please try again in a few minutes",
+		}
+	case status == 404:
+		return &ExtensionError{
+			Type:        ApiUnavailable,
+			Message:     "API endpoint not found (404)",
+			Retryable:   false,
+			UserMessage: "Using fallback analysis method",
+		}
+	case status == 400:
+		return &ExtensionError{
+			Type:        InvalidContent,
+			Message:     "Invalid request format or content",
+			Retryable:   false,
+			UserMessage: "Please try with different content or check your input",
+		}
+	case status >= 400 && status < 500:
+		return &ExtensionError{
+			Type:        ApiUnavailable,
+			Message:     fmt.Sprintf("API request failed with status %d", status),
+			Retryable:   false,
+			UserMessage: "Please check your request and try again",
+		}
+	default:
+		return &ExtensionError{
+			Type:        NetworkError,
+			Message:     message,
+			Retryable:   true,
+			UserMessage: "Please check your internet connection and try again",
+		}
+	}
+}

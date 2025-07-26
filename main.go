@@ -66,7 +66,7 @@ func analyzeArticleHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := CallAIAnalyzeArticle(req.Content, req.Title, req.URL, req.LastEdited)
+	result, err := CallAIAnalyzeArticle(req.Content, req.Title, req.URL, req.LastEdited, Gemini)
 	if err != nil {
 		http.Error(w, `{"status":"error","data":"AI analysis failed"}`, http.StatusInternalServerError)
 		return
