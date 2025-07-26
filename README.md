@@ -2,6 +2,12 @@
 
 the backend for the false fact extension
 
+### Run
+
+releases, unzip the tar file, then you can use the control script after setting your .env (instructions for both below) (for linux amd64)
+you can run on Windows easily by having the .env file, ignore the script, and you can run the win binary
+other platforms build
+
 ### Endpoints
 
 - POST `/analyze/article` — for articles `{ "content": "content", "title": "Title", "url": "something.com", "last_edited": "2025-07-25T18:05:27.849Z" }`
