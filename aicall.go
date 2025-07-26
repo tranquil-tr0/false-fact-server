@@ -201,8 +201,6 @@ func geminiApiCall(prompt string) (*AnalyzeArticleResponse, error) {
 		content = result.Text()
 	}
 
-	println("GroundingChunks:", result.Candidates[0].GroundingMetadata.GroundingChunks)
-	println("GroundingSupports:", result.Candidates[0].GroundingMetadata.GroundingSupports)
 	return parseAnalysisResponse(content)
 }
 

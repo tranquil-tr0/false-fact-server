@@ -1,32 +1,32 @@
 #!/bin/bash
 
 # script for false fact backend/api/server control
-# Usage: ./server-control.sh [start|stop|restart|status] [port]
+# Usage: ./server-control.sh [start|stop|restart|status]
 
 SERVER_NAME="server"
-DEFAULT_PORT="3088"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PID_FILE="$SCRIPT_DIR/.${SERVER_NAME}.pid"
 LOG_FILE="$SCRIPT_DIR/${SERVER_NAME}.log"
 
-# Allow port to be specified as second argument
-PORT=${2:-$DEFAULT_PORT}
+# Load PORT from .env file
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    export $(grep -E '^PORT=' "$SCRIPT_DIR/.env" | xargs)
+fi
 
 start_server() {
     if [ -f "$PID_FILE" ]; then
         echo "Server is already running (PID: $(cat $PID_FILE))"
         return 1
     fi
-    
+
     # Check if port is available
     if netstat -tuln | grep -q ":$PORT "; then
         echo "Error: Port $PORT is already in use!"
-        echo "Try a different port: ./deploy.sh start [port_number]"
+        echo "Cannot start server: port defined in .env is busy."
         return 1
     fi
-    
+
     echo "Starting $SERVER_NAME on port $PORT..."
-    export PORT=$PORT
     nohup ./$SERVER_NAME > "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
     echo "Server started with PID: $!"
@@ -69,30 +69,8 @@ status_server() {
     fi
 }
 
-# Function to find an available port
-find_available_port() {
-    local start_port=${1:-3088}
-    local port=$start_port
-    
-    while netstat -tuln | grep -q ":$port "; do
-        port=$((port + 1))
-        if [ $port -gt 65535 ]; then
-            echo "Error: No available ports found"
-            return 1
-        fi
-    done
-    
-    echo $port
-}
-
 case "$1" in
     start)
-        # If no port specified and default is taken, find available port
-        if [ -z "$2" ] && netstat -tuln | grep -q ":$DEFAULT_PORT "; then
-            AVAILABLE_PORT=$(find_available_port $DEFAULT_PORT)
-            echo "Port $DEFAULT_PORT is in use, trying port $AVAILABLE_PORT"
-            PORT=$AVAILABLE_PORT
-        fi
         start_server
         ;;
     stop)
@@ -105,11 +83,7 @@ case "$1" in
         status_server
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status} [port]"
-        echo "Examples:"
-        echo "  $0 start          # Start on default port (3000) or find available"
-        echo "  $0 start 3001     # Start on specific port"
-        echo "  $0 restart 3002   # Restart on specific port"
+        echo "Usage: $0 {start|stop|restart|status}"
         exit 1
         ;;
 esac
