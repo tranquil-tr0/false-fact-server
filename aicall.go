@@ -14,6 +14,8 @@ import (
 	"google.golang.org/genai"
 )
 
+var verbose bool
+
 type Model int
 
 const (
@@ -69,14 +71,14 @@ You should try to have closer to 5 reasons, with each reason being as concise as
 REQUIRED RESPONSE STRUCTURE:
 {
   "reasoning": {
-    "factual": [ "reason 1", "reason 2", ... ],
-    "unfactual": [ "reason 1", ... ],
-    "subjective": [ "reason 1", ... ],
-    "objective": [ "reason 1", ... ]
+	"factual": [ "reason 1", "reason 2", ... ],
+	"unfactual": [ "reason 1", ... ],
+	"subjective": [ "reason 1", ... ],
+	"objective": [ "reason 1", ... ]
   },
   "credibilityScore": <number 0-100>,  "categories": {
-    "factuality": <percentage 0-100>,
-    "objectivity": <percentage 0-100>
+	"factuality": <percentage 0-100>,
+	"objectivity": <percentage 0-100>
   },
   "confidence": <number 0-100>
   "sources": [ "[1](https:/...)", "[2](https:/...)" ]
@@ -155,6 +157,10 @@ func geminiApiCall(prompt string) (*AnalyzeArticleResponse, error) {
 		}
 	}
 
+	if verbose {
+		fmt.Printf("[Gemini] Using prompt: %s\n", prompt)
+	}
+
 	ctx := context.Background()
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  apiKey,
@@ -199,6 +205,9 @@ func geminiApiCall(prompt string) (*AnalyzeArticleResponse, error) {
 	content := ""
 	if result != nil {
 		content = result.Text()
+		if verbose {
+			fmt.Printf("[Gemini] Received content: %s\n", content)
+		}
 	}
 
 	return parseAnalysisResponse(content)
@@ -220,6 +229,9 @@ func pollinationsApiCall(systemPrompt string, userPrompt string) (*AnalyzeArticl
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
+	}
+	if verbose {
+		fmt.Printf("[Pollinations] Sending payload: %s\n", string(payloadBytes))
 	}
 
 	req, err := http.NewRequest("POST", "https://text.pollinations.ai/openai", bytes.NewBuffer(payloadBytes))
@@ -243,6 +255,9 @@ func pollinationsApiCall(systemPrompt string, userPrompt string) (*AnalyzeArticl
 	if err != nil {
 		return nil, err
 	}
+	if verbose {
+		fmt.Printf("[Pollinations] Received response body: %s\n", string(body))
+	}
 
 	var responseJson map[string]interface{}
 	if err := json.Unmarshal(body, &responseJson); err != nil {
@@ -255,6 +270,9 @@ func pollinationsApiCall(systemPrompt string, userPrompt string) (*AnalyzeArticl
 			if message, ok := choice["message"].(map[string]interface{}); ok {
 				if c, ok := message["content"].(string); ok {
 					content = c
+					if verbose {
+						fmt.Printf("[Pollinations] Extracted content: %s\n", content)
+					}
 				}
 			}
 		}
@@ -264,6 +282,9 @@ func pollinationsApiCall(systemPrompt string, userPrompt string) (*AnalyzeArticl
 }
 
 func parseAnalysisResponse(content string) (*AnalyzeArticleResponse, error) {
+	if verbose {
+		fmt.Printf("[Parse] Raw content for parsing: %s\n", content)
+	}
 	content = string(bytes.TrimSpace([]byte(content)))
 
 	// Extract first JSON object from the response
@@ -271,10 +292,16 @@ func parseAnalysisResponse(content string) (*AnalyzeArticleResponse, error) {
 	jsonMatch := re.FindString(content)
 	if jsonMatch != "" {
 		content = jsonMatch
+		if verbose {
+			fmt.Printf("[Parse] Extracted JSON: %s\n", content)
+		}
 	}
 
 	var parsed AnalyzeArticleResponse
 	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
+		if verbose {
+			fmt.Printf("[Parse] Failed to unmarshal: %v\n", err)
+		}
 		return nil, &ExtensionError{
 			Type:        ApiUnavailable,
 			Message:     "Failed to parse analysis response",

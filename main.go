@@ -3,6 +3,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -57,23 +58,28 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 func analyzeArticleHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 
 	var req AnalyzeArticleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"status":"error","data":"Invalid request body"}`, http.StatusBadRequest)
+		return
 	}
 
 	result, err := CallAIAnalyzeArticle(req.Content, req.Title, req.URL, req.LastEdited, Gemini)
 	if err != nil {
 		http.Error(w, `{"status":"error","data":"AI analysis failed", "error": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
 	}
 
 	json.NewEncoder(w).Encode(result)
 }
 
 func main() {
+	flag.BoolVar(&verbose, "verbose", false, "Enable verbose debug output")
+	flag.Parse()
 	http.HandleFunc("/", rootHandler)
 	http.HandleFunc("/health", healthHandler)
 	http.HandleFunc("/analyze/article", analyzeArticleHandler)
@@ -93,6 +99,9 @@ func main() {
 	fmt.Printf("   - POST /analyze/article\n")
 	fmt.Printf("   - GET  /health\n")
 	fmt.Printf("\n💡 Access your server at: http://localhost%s\n", port)
+	if verbose {
+		fmt.Printf("[main] Verbose mode enabled\n")
+	}
 
 	// Start the server
 	log.Fatal(http.ListenAndServe(port, nil))
