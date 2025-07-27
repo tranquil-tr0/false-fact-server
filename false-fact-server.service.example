@@ -1,0 +1,14 @@
+[Unit]
+Description=False Fact API Server
+After=network.target
+
+[Service]
+ExecStart=%h/falsefactapi/false-fact-server
+WorkingDirectory=%h/falsefactapi
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

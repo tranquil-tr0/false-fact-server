@@ -22,3 +22,6 @@ Uses the following environment variables:
 
 Create a `.env` file in the project root to set these values.
 
+### Example systemd File
+
+at false-fact-server.service.example
