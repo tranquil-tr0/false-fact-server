@@ -68,7 +68,53 @@ func analyzeArticleHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := CallAIAnalyzeArticle(req.Content, req.Title, req.URL, req.LastEdited, Gemini)
+	result, err := AiAnalyzeArticle(req.Content, req.Title, req.URL, req.LastEdited, Gemini)
+	if err != nil {
+		http.Error(w, `{"status":"error","data":"AI analysis failed", "error": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(result)
+}
+
+// /analyze/text/long endpoint handler
+func analyzeLongTextHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	var req AnalyzeTextRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"status":"error","data":"Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	result, err := AiAnalyzeTextLong(req.Content, Gemini)
+	if err != nil {
+		http.Error(w, `{"status":"error","data":"AI analysis failed", "error": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(result)
+}
+
+// /analyze/text/short endpoint handler
+func analyzeShortTextHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	var req AnalyzeTextRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"status":"error","data":"Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	result, err := AiAnalyzeTextShort(req.Content, Gemini)
 	if err != nil {
 		http.Error(w, `{"status":"error","data":"AI analysis failed", "error": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -83,6 +129,8 @@ func main() {
 	http.HandleFunc("/", rootHandler)
 	http.HandleFunc("/health", healthHandler)
 	http.HandleFunc("/analyze/article", analyzeArticleHandler)
+	http.HandleFunc("/analyze/text/short", analyzeShortTextHandler)
+	http.HandleFunc("/analyze/text/long", analyzeLongTextHandler)
 
 	err := godotenv.Load()
 	if err != nil {
