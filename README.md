@@ -11,6 +11,8 @@ other platforms build
 ### Endpoints
 
 - POST `/analyze/article` - for articles - `{ "content": "content", "title": "Title", "url": "something.com", "last_edited": "2025-07-25T18:05:27.849Z" }` is the format
+- POST `/analyze/text/short` - for short text - `{ "content": "content" }` is the format
+- POST `/analyze/text/long` - for long text - `{ "content": "content" }` is the format
 - `/health` - health check
 
 ### Environment Variables

@@ -145,6 +145,8 @@ func main() {
 	fmt.Printf("🚀 Server starting on port %s\n", port)
 	fmt.Printf("📡 API endpoints:\n")
 	fmt.Printf("   - POST /analyze/article\n")
+	fmt.Printf("   - POST /analyze/text/short\n")
+	fmt.Printf("   - POST /analyze/text/long\n")
 	fmt.Printf("   - GET  /health\n")
 	fmt.Printf("\n💡 Access your server at: http://localhost%s\n", port)
 	if verbose {
