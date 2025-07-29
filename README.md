@@ -20,7 +20,8 @@ other platforms build
 Uses the following environment variables:
 
 - `GEMINI_API_KEY` - api key for gemini ai
-- `PORT` - port number to run the server (default: 3088)
+- `MODEL` - select the model used (Gemini or Pollinations)
+- `PORT` - port number to run the server
 
 Create a `.env` file in the project root to set these values.
 

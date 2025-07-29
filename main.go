@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -68,7 +69,7 @@ func analyzeArticleHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := AiAnalyzeArticle(req.Content, req.Title, req.URL, req.LastEdited, Gemini)
+	result, err := AiAnalyzeArticle(req.Content, req.Title, req.URL, req.LastEdited, selectedModel)
 	if err != nil {
 		http.Error(w, `{"status":"error","data":"AI analysis failed", "error": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -91,7 +92,7 @@ func analyzeLongTextHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := AiAnalyzeTextLong(req.Content, Gemini)
+	result, err := AiAnalyzeTextLong(req.Content, selectedModel)
 	if err != nil {
 		http.Error(w, `{"status":"error","data":"AI analysis failed", "error": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -114,7 +115,7 @@ func analyzeShortTextHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := AiAnalyzeTextShort(req.Content, Gemini)
+	result, err := AiAnalyzeTextShort(req.Content, selectedModel)
 	if err != nil {
 		http.Error(w, `{"status":"error","data":"AI analysis failed", "error": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -122,6 +123,8 @@ func analyzeShortTextHandler(w http.ResponseWriter, r *http.Request) {
 
 	json.NewEncoder(w).Encode(result)
 }
+
+var selectedModel Model
 
 func main() {
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose debug output")
@@ -134,11 +137,30 @@ func main() {
 
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("No .env file found or failed to load .env")
+		log.Fatal("No .env file found or failed to load .env")
 	}
+
+	// Model selection via env file
+	modelEnv := strings.ToLower(os.Getenv("MODEL"))
+	switch modelEnv {
+	case "pollinations":
+		selectedModel = Pollinations
+		fmt.Println("[main] Using model: Pollinations (set by MODEL)")
+	case "gemini":
+		selectedModel = Gemini
+		fmt.Println("[main] Using model: Gemini (default or set by MODEL)")
+		if os.Getenv("GEMINI_API_KEY") == "" {
+			log.Fatal("GEMINI_API_KEY is not set in the environment. Please set it to use the Gemini model.")
+		}
+	case "":
+		log.Fatal("No MODEL set in env file, please set MODEL to 'Pollinations' or 'Gemini'")
+	default:
+		log.Fatal(fmt.Sprintf("[main] Unknown MODEL '%s'", modelEnv))
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "3088"
+		log.Fatal("No PORT variable set in env file\n")
 	}
 	port = ":" + port
 
