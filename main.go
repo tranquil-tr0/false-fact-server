@@ -126,14 +126,28 @@ func analyzeShortTextHandler(w http.ResponseWriter, r *http.Request) {
 
 var selectedModel Model
 
+// CORS middleware
+func withCORS(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next(w, r)
+	}
+}
+
 func main() {
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose debug output")
 	flag.Parse()
-	http.HandleFunc("/", rootHandler)
-	http.HandleFunc("/health", healthHandler)
-	http.HandleFunc("/analyze/article", analyzeArticleHandler)
-	http.HandleFunc("/analyze/text/short", analyzeShortTextHandler)
-	http.HandleFunc("/analyze/text/long", analyzeLongTextHandler)
+	http.HandleFunc("/", withCORS(rootHandler))
+	http.HandleFunc("/health", withCORS(healthHandler))
+	http.HandleFunc("/analyze/article", withCORS(analyzeArticleHandler))
+	http.HandleFunc("/analyze/text/short", withCORS(analyzeShortTextHandler))
+	http.HandleFunc("/analyze/text/long", withCORS(analyzeLongTextHandler))
 
 	err := godotenv.Load()
 	if err != nil {
@@ -145,10 +159,10 @@ func main() {
 	switch modelEnv {
 	case "pollinations":
 		selectedModel = Pollinations
-		fmt.Println("[main] Using model: Pollinations (set by MODEL)")
+		fmt.Println("[main] Using model: Pollinations")
 	case "gemini":
 		selectedModel = Gemini
-		fmt.Println("[main] Using model: Gemini (default or set by MODEL)")
+		fmt.Println("[main] Using model: Gemini")
 		if os.Getenv("GEMINI_API_KEY") == "" {
 			log.Fatal("GEMINI_API_KEY is not set in the environment. Please set it to use the Gemini model.")
 		}
