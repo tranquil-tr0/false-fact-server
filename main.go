@@ -25,19 +25,22 @@ const (
 )
 
 // API response structure
-type Response struct {
-	Data      string     `json:"data"`
-	Timestamp time.Time  `json:"timestamp"`
-	Status    StatusType `json:"status"`
+// Standard API response structure
+type APIResponse struct {
+	Success bool        `json:"success"`
+	Data    interface{} `json:"data,omitempty"`
+	Error   interface{} `json:"error,omitempty"`
 }
 
 // /health (health check) endpoint
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	response := Response{
-		Data:      "Server is running successfully!",
-		Timestamp: time.Now(),
-		Status:    StatusHealthy,
+	response := APIResponse{
+		Success: true,
+		Data: map[string]interface{}{
+			"message":   "Server is running successfully!",
+			"timestamp": time.Now(),
+		},
 	}
 	json.NewEncoder(w).Encode(response)
 }
@@ -45,12 +48,13 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 // Handles root and unknown endpoints
 func rootHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
 	w.WriteHeader(http.StatusNotFound)
-	response := Response{
-		Data:      fmt.Sprintf("Endpoint '%s' does not exist", r.URL.Path),
-		Timestamp: time.Now(),
-		Status:    StatusError,
+	response := APIResponse{
+		Success: false,
+		Error: map[string]interface{}{
+			"message":   fmt.Sprintf("Endpoint '%s' does not exist", r.URL.Path),
+			"timestamp": time.Now(),
+		},
 	}
 	json.NewEncoder(w).Encode(response)
 }
@@ -58,70 +62,115 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 // /analyze/article endpoint handler
 func analyzeArticleHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(APIResponse{
+			Success: false,
+			Error:   "Method not allowed",
+		})
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 
 	var req AnalyzeArticleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"status":"error","data":"Invalid request body"}`, http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(APIResponse{
+			Success: false,
+			Error:   "Invalid request body",
+		})
 		return
 	}
 
 	result, err := AiAnalyzeArticle(req.Content, req.Title, req.URL, req.LastEdited, selectedModel)
 	if err != nil {
-		http.Error(w, `{"status":"error","data":"AI analysis failed", "error": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(APIResponse{
+			Success: false,
+			Error:   map[string]interface{}{"message": "AI analysis failed", "error": err.Error()},
+		})
 		return
 	}
 
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(APIResponse{
+		Success: true,
+		Data:    result,
+	})
 }
 
 // /analyze/text/long endpoint handler
 func analyzeLongTextHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(APIResponse{
+			Success: false,
+			Error:   "Method not allowed",
+		})
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 
 	var req AnalyzeTextRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"status":"error","data":"Invalid request body"}`, http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(APIResponse{
+			Success: false,
+			Error:   "Invalid request body",
+		})
 		return
 	}
 
 	result, err := AiAnalyzeTextLong(req.Content, selectedModel)
 	if err != nil {
-		http.Error(w, `{"status":"error","data":"AI analysis failed", "error": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(APIResponse{
+			Success: false,
+			Error:   map[string]interface{}{"message": "AI analysis failed", "error": err.Error()},
+		})
 		return
 	}
 
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(APIResponse{
+		Success: true,
+		Data:    result,
+	})
 }
 
 // /analyze/text/short endpoint handler
 func analyzeShortTextHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(APIResponse{
+			Success: false,
+			Error:   "Method not allowed",
+		})
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 
 	var req AnalyzeTextRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"status":"error","data":"Invalid request body"}`, http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(APIResponse{
+			Success: false,
+			Error:   "Invalid request body",
+		})
 		return
 	}
 
 	result, err := AiAnalyzeTextShort(req.Content, selectedModel)
 	if err != nil {
-		http.Error(w, `{"status":"error","data":"AI analysis failed", "error": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(APIResponse{
+			Success: false,
+			Error:   map[string]interface{}{"message": "AI analysis failed", "error": err.Error()},
+		})
 		return
 	}
 
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(APIResponse{
+		Success: true,
+		Data:    result,
+	})
 }
 
 var selectedModel Model
