@@ -1,0 +1,1 @@
+- add groq model(s) (with https://pkg.go.dev/github.com/conneroisu/groq-go maybe?)
